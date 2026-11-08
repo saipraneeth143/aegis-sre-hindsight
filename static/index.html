@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AegisSRE — Autonomous Incident Commander Powered by Vectorize Hindsight</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- Top Command Header -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo">🛡️</div>
+      <div>
+        <div class="brand-title">AegisSRE <span class="badge-accent">HINDSIGHT MEMORY ENGINE</span></div>
+        <div class="brand-subtitle">Autonomous Incident Response &amp; DevOps Pipeline Memory Agent</div>
+      </div>
+    </div>
+
+    <div class="controls-bar">
+      <div class="control-group">
+        <label for="bankSelect">Memory Bank (`bank_id`)</label>
+        <select id="bankSelect">
+          <option value="prod-payments-cluster">prod-payments-cluster (Tier-0)</option>
+          <option value="core-platform-k8s">core-platform-k8s</option>
+          <option value="global-edge-ingress">global-edge-ingress</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="modelSelect">Groq Inference Model</label>
+        <select id="modelSelect">
+          <option value="openai/gpt-oss-120b">openai/gpt-oss-120b (+ToolGuard)</option>
+          <option value="qwen/qwen3-32b">qwen/qwen3-32b (+ToolGuard)</option>
+        </select>
+      </div>
+      <button id="btnResetBank" class="btn-secondary" title="Reset memory bank to default seed state">
+        ↻ Reset Demo Bank
+      </button>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-tabs">
+    <button class="nav-tab active" data-tab="tab-warroom">⚡ 1. Incident War-Room (Before vs. After)</button>
+    <button class="nav-tab" data-tab="tab-memory">🧠 2. Hindsight Memory Bank (`retain` / `recall` / `reflect`)</button>
+    <button class="nav-tab" data-tab="tab-curve">📈 3. Learning Curve &amp; Groq Tool-Guard</button>
+    <button class="nav-tab" data-tab="tab-slides">🖼️ 4. Interactive Pictured Pitch Slides (5 Slides)</button>
+  </nav>
+
+  <!-- Main Workspace Container -->
+  <main class="container">
+
+    <!-- =====================================================================
+         TAB 1: INCIDENT WAR-ROOM (SIDE-BY-SIDE STATELESS VS HINDSIGHT)
+         ===================================================================== -->
+    <section id="tab-warroom" class="tab-panel active">
+      <div class="story-banner">
+        <div>
+          <h3>🎯 60-Second Judge Walkthrough: Watch Memory Transform Incident Response</h3>
+          <p>Select a live production scenario below (or paste any stack trace / PR diff) to compare a <strong>Stateless AI Agent</strong> against <strong>AegisSRE with Hindsight Memory</strong>.</p>
+        </div>
+        <div class="preset-buttons">
+          <button class="btn-preset active" data-scenario="pool_exhaustion">
+            🔥 Interaction 5: DB Pool Exhaustion (INC-4082 Recall)
+          </button>
+          <button class="btn-preset" data-scenario="grpc_cascade">
+            ⚡ Interaction 12: Flash-Sale gRPC Cascade (Graph Traversal)
+          </button>
+          <button class="btn-preset" data-scenario="pre_deploy_shield">
+            🛡️ Interaction 20: Pre-Deploy CI/CD Gate (`reflect()` Shield)
+          </button>
+        </div>
+      </div>
+
+      <!-- Alert Input Box -->
+      <div class="alert-composer card">
+        <div class="card-header">
+          <span id="scenarioTitle" class="card-title">Active Production Telemetry / PagerDuty Payload</span>
+          <span id="scenarioSeverity" class="badge-danger">SEV-1 ($14,200 / min impact)</span>
+        </div>
+        <textarea id="alertInput" rows="4"></textarea>
+        <div class="composer-actions">
+          <div class="stage-pill" id="interactionStagePill">Stage: Interaction 5 (Day 14 - Experience Recall)</div>
+          <div class="action-buttons">
+            <button id="btnAnalyze" class="btn-primary">🚀 Run Side-by-Side Triage (`recall` + `reflect`)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Side-by-Side Comparison Grid -->
+      <div class="comparison-grid">
+        <!-- LEFT: STATELESS AGENT -->
+        <div class="card card-stateless">
+          <div class="card-header">
+            <div>
+              <span class="status-dot dot-red"></span>
+              <strong class="card-title">WITHOUT MEMORY: Stateless AI Agent</strong>
+            </div>
+            <span class="badge-muted">0 Recalled Facts</span>
+          </div>
+
+          <div class="section-block">
+            <div class="section-label">Textbook Diagnosis (Context-Blind)</div>
+            <p id="statelessDiagnosis" class="body-text"></p>
+          </div>
+
+          <div class="section-block">
+            <div class="section-label">Suggested Commands (Dangerous in This Cluster!)</div>
+            <div id="statelessCommands" class="code-list code-danger"></div>
+          </div>
+
+          <div class="outcome-box outcome-danger">
+            <div class="outcome-header">💥 PRODUCTION IMPACT IF EXECUTED</div>
+            <p id="statelessOutcome"></p>
+            <div class="mttr-metric">Estimated MTTR: <strong id="statelessMttr">47 minutes</strong></div>
+          </div>
+        </div>
+
+        <!-- RIGHT: HINDSIGHT AGENT -->
+        <div class="card card-hindsight">
+          <div class="card-header">
+            <div>
+              <span class="status-dot dot-green"></span>
+              <strong class="card-title">WITH HINDSIGHT: AegisSRE Memory Agent</strong>
+            </div>
+            <span id="recallBadge" class="badge-success">4-Way TEMPR Active</span>
+          </div>
+
+          <div class="section-block">
+            <div class="section-label">Memory-Grounded Root Cause (`hindsight.recall`)</div>
+            <p id="hindsightDiagnosis" class="body-text"></p>
+          </div>
+
+          <div class="section-block">
+            <div class="section-label">🛑 Blocked Runbook Anti-Patterns (Learned from Past Failures)</div>
+            <div id="hindsightBlocked" class="blocked-list"></div>
+          </div>
+
+          <div class="section-block">
+            <div class="section-label">✅ Verified 1-Line Remediation Commands</div>
+            <div id="hindsightCommands" class="code-list code-success"></div>
+          </div>
+
+          <div class="outcome-box outcome-success">
+            <div class="outcome-header">🛡️ VERIFIED OUTCOME WITH HINDSIGHT</div>
+            <p id="hindsightOutcome"></p>
+            <div class="mttr-metric">Actual MTTR: <strong id="hindsightMttr">1.2 minutes (97% faster)</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TEMPR 4-Way Retrieval Breakdown & Hindsight Reflect Synthesis -->
+      <div class="tempr-grid">
+        <div class="card">
+          <div class="card-header">
+            <strong class="card-title">🔍 Hindsight TEMPR 4-Way Parallel Retrieval Breakdown (`recall`)</strong>
+            <span id="temprLatency" class="badge-accent">1.8 ms</span>
+          </div>
+          <p class="muted-note">
+            Unlike basic vector RAG, Hindsight fuses <strong>Semantic Similarity</strong>, <strong>BM25 Exact Error Match</strong>, <strong>Entity Knowledge Graph Traversal</strong>, and <strong>Temporal Decay</strong> via Reciprocal Rank Fusion (RRF):
+          </p>
+          <div id="recalledMemoriesList" class="recalled-list"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <strong class="card-title">🧠 Hindsight Agentic Synthesis (`reflect`)</strong>
+            <span class="badge-accent">Cross-Incident Invariants</span>
+          </div>
+          <div id="reflectSynthesisBox" class="reflect-box"></div>
+
+          <div class="quick-retain-box">
+            <h4>➕ Retain New Post-Mortem Learning (`hindsight.retain`)</h4>
+            <p class="muted-note">Log a new incident finding or failed runbook below and immediately re-run triage to watch the agent learn live:</p>
+            <div class="inline-form">
+              <input type="text" id="quickRetainInput" placeholder="e.g., [Post-Mortem INC-4409] Never run helm rollback on payment-gateway-grpc during schema migration; drain Envoy listeners first." />
+              <button id="btnQuickRetain" class="btn-primary">Retain in Bank</button>
+            </div>
+            <div id="quickRetainStatus" class="status-toast"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 2: HINDSIGHT BIOMIMETIC MEMORY EXPLORER & KNOWLEDGE GRAPH
+         ===================================================================== -->
+    <section id="tab-memory" class="tab-panel">
+      <div class="memory-stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Total Bank Memories</div>
+          <div class="stat-value" id="statTotalMemories">6</div>
+          <div class="stat-sub">Isolated by `bank_id`</div>
+        </div>
+        <div class="stat-card stat-world">
+          <div class="stat-label">🌐 `world` Facts</div>
+          <div class="stat-value" id="statWorldCount">2</div>
+          <div class="stat-sub">Service Topology &amp; SLAs</div>
+        </div>
+        <div class="stat-card stat-exp">
+          <div class="stat-label">🔥 `experience` Facts</div>
+          <div class="stat-value" id="statExpCount">3</div>
+          <div class="stat-sub">Post-Mortems &amp; Failed Runbooks</div>
+        </div>
+        <div class="stat-card stat-obs">
+          <div class="stat-label">💡 `observation` Facts</div>
+          <div class="stat-value" id="statObsCount">1</div>
+          <div class="stat-sub">Synthesized by `reflect()`</div>
+        </div>
+      </div>
+
+      <div class="explorer-grid">
+        <!-- Left: Memory Bank Records & Filter -->
+        <div class="card">
+          <div class="card-header">
+            <strong class="card-title">Biomimetic Memory Bank Inspector</strong>
+            <div class="filter-pills">
+              <button class="pill active" data-filter="all">All</button>
+              <button class="pill" data-filter="world">world</button>
+              <button class="pill" data-filter="experience">experience</button>
+              <button class="pill" data-filter="observation">observation</button>
+            </div>
+          </div>
+          <div id="bankMemoriesContainer" class="bank-memories-list"></div>
+        </div>
+
+        <!-- Right: Entity Knowledge Graph & Live Reflect Trigger -->
+        <div class="card">
+          <div class="card-header">
+            <strong class="card-title">🕸️ Hindsight Entity Knowledge Graph (2-Hop Blast Radius)</strong>
+            <button id="btnTriggerReflect" class="btn-secondary">✨ Run `reflect()` &amp; Persist Observation</button>
+          </div>
+          <svg id="knowledgeGraphSvg" viewBox="0 0 640 360" class="graph-svg"></svg>
+          <div class="graph-legend">
+            <span><i class="dot service-dot"></i> Microservice / Infra</span>
+            <span><i class="dot inc-dot"></i> Incident ID (`INC-*`)</span>
+            <span><i class="dot err-dot"></i> Error Signature / Flag</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 3: LEARNING CURVE & GROQ FUNCTION-CALLING SELF-HEALING
+         ===================================================================== -->
+    <section id="tab-curve" class="tab-panel">
+      <div class="card">
+        <div class="card-header">
+          <strong class="card-title">📈 The Hindsight Learning Curve: Interaction 1 → Interaction 5 → Interaction 20</strong>
+          <span class="badge-success">MTTR Reduced by 98.5%</span>
+        </div>
+        <div id="learningCurveStages" class="curve-stages-grid"></div>
+      </div>
+
+      <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+          <div>
+            <strong class="card-title">🛠️ Groq Function-Calling Self-Healing Guard (`openai/gpt-oss-120b` &amp; `qwen/qwen3-32b`)</strong>
+          </div>
+          <button id="btnRunToolGuardTest" class="btn-primary">⚡ Test Live Malformed Tool-Call Recovery</button>
+        </div>
+        <p class="muted-note">
+          Open-weights reasoning models (`qwen/qwen3-32b` and `openai/gpt-oss-120b`) frequently emit `&lt;think&gt;...&lt;/think&gt;` tags, markdown fences, trailing commas, or truncated JSON during tool invocations. `GroqToolCallGuard` intercepts and repairs these payloads before they hit Hindsight:
+        </p>
+        <div id="toolGuardOutput" class="tool-guard-grid"></div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         TAB 4: INTERACTIVE PICTURED PRESENTATION SLIDES
+         ===================================================================== -->
+    <section id="tab-slides" class="tab-panel">
+      <div class="slides-viewer card">
+        <div class="slides-toolbar">
+          <div>
+            <strong id="slideHeaderTitle" class="card-title">Slide 1 of 5: The $14,000/Minute Amnesia Problem</strong>
+          </div>
+          <div class="slides-controls">
+            <button id="btnPrevSlide" class="btn-secondary">◀ Previous Slide</button>
+            <div id="slideDots" class="slide-dots"></div>
+            <button id="btnNextSlide" class="btn-primary">Next Slide ▶</button>
+          </div>
+        </div>
+
+        <div class="slide-frame">
+          <img id="slideImage" src="/static/slides/slide_1_problem.jpg" alt="Presentation Slide" class="slide-img" />
+        </div>
+
+        <div class="slide-caption-box">
+          <div class="slide-caption-header">🎙️ Judge Pitch &amp; Speaker Notes</div>
+          <p id="slideSpeakerNotes"></p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
+

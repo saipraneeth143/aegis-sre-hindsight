@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AegisSRE — Interactive Pictured Presentation Deck</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    .deck-shell {
+      max-width: 1280px;
+      margin: 1.5rem auto;
+      padding: 0 1.5rem 2rem;
+    }
+    .deck-stage {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid #233252;
+      background: #000;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+    }
+    .deck-stage img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .thumb-strip {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .thumb-item {
+      border: 2px solid #233252;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      opacity: 0.6;
+      transition: all 0.18s ease;
+      background: #090e1a;
+    }
+    .thumb-item:hover, .thumb-item.active {
+      opacity: 1;
+      border-color: #06b6d4;
+      transform: translateY(-2px);
+    }
+    .thumb-item img {
+      width: 100%;
+      height: 68px;
+      object-fit: cover;
+      display: block;
+    }
+    .thumb-caption {
+      font-size: 0.7rem;
+      padding: 0.25rem 0.4rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #cbd5e1;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo">🖼️</div>
+      <div>
+        <div class="brand-title">AegisSRE Pictured Pitch Deck <span class="badge-accent">INTERACTIVE SLIDES</span></div>
+        <div class="brand-subtitle">Use Left/Right Arrow Keys or Click Thumbnails Below</div>
+      </div>
+    </div>
+    <div class="controls-bar">
+      <a href="/" class="btn-secondary" style="text-decoration:none;">⚡ Back to Live War-Room UI</a>
+      <button id="btnAutoPlay" class="btn-secondary">▶ Auto-Play (6s)</button>
+      <button id="btnFullscreen" class="btn-primary">⛶ Fullscreen Slide</button>
+    </div>
+  </header>
+
+  <div class="deck-shell">
+    <div class="slides-toolbar">
+      <strong id="deckTitle" class="card-title" style="font-size:1.1rem;">Slide 1 of 6</strong>
+      <div class="slides-controls">
+        <button id="prevSlideBtn" class="btn-secondary">◀ Previous</button>
+        <button id="nextSlideBtn" class="btn-primary">Next ▶</button>
+      </div>
+    </div>
+
+    <div class="deck-stage" id="deckStage">
+      <img id="mainSlideImg" src="/static/slides/slide_1_problem.jpg" alt="Slide" />
+    </div>
+
+    <div class="slide-caption-box">
+      <div class="slide-caption-header">🎙️ Judge Pitch Script &amp; Technical Notes (What to Say on This Slide)</div>
+      <p id="mainSlideNotes" style="font-size:0.95rem;"></p>
+    </div>
+
+    <div class="thumb-strip" id="thumbStrip"></div>
+  </div>
+
+  <script>
+    const SLIDES = [
+      {
+        label: "1. The Problem",
+        title: "Slide 1 of 6: The $14,000/Minute Operational Amnesia Problem",
+        src: "/static/slides/slide_1_problem.jpg",
+        notes: "Say to Judges: 'At 3:00 AM, when a database connection pool saturates, a stateless AI wakes up with complete amnesia. It suggests textbook commands—like restarting pods or doubling pool size—which triggers a massive retry storm and crashes Postgres for 42 minutes. AegisSRE uses Vectorize Hindsight to recall Incident #4082 from 19 days ago, block the dangerous restart, and run the verified 14-second fix.'"
+      },
+      {
+        label: "2. Architecture",
+        title: "Slide 2 of 6: AegisSRE x Hindsight Biomimetic Memory Architecture",
+        src: "/static/slides/slide_2_architecture.jpg",
+        notes: "Say to Judges: 'Here is how AegisSRE is architected. PagerDuty alerts, Kubernetes events, and Git diffs flow into our orchestrator backed by Hindsight’s three primitives: retain(), recall(), and reflect(). We partition memories into World Facts (topology), Experience Facts (post-mortems and failed runbooks), and Observations (synthesized rules), paired with Groq’s openai/gpt-oss-120b and qwen/qwen3-32b protected by our self-healing ToolCallGuard.'"
+      },
+      {
+        label: "3. 4-Way TEMPR",
+        title: "Slide 3 of 6: Inside Hindsight TEMPR — 4-Way Parallel Retrieval",
+        src: "/static/slides/slide_3_tempr.jpg",
+        notes: "Say to Judges: 'Why did standard vector RAG fail us? Because dense embeddings blur hex error codes like 0x8F4A_POOL_EXHAUSTED. Hindsight’s TEMPR engine executes four parallel searches simultaneously: Semantic Vector Search, BM25 Exact Keyword Match, 2-Hop Entity Graph Traversal across connected services, and Temporal Decay—fusing them via Reciprocal Rank Fusion in 1.8 milliseconds.'"
+      },
+      {
+        label: "4. Learning Curve",
+        title: "Slide 4 of 6: The Biomimetic Memory Learning Curve (Day 1 to Day 45)",
+        src: "/static/slides/slide_4_learning_curve.jpg",
+        notes: "Say to Judges: 'Watch how the agent improves over time. On Day 1 (Cold Start), MTTR is 47 minutes; we retain the post-mortem into Hindsight. By Day 14 (Interaction 5), AegisSRE recalls the failed runbook and resolves recurring cascades in 1.2 minutes. By Day 45 (Interaction 20), hindsight.reflect() synthesizes cross-incident invariants to block risky Pull Requests in CI/CD before they even deploy.'"
+      },
+      {
+        label: "5. Business ROI",
+        title: "Slide 5 of 6: Production Results & Business ROI",
+        src: "/static/slides/slide_5_impact.jpg",
+        notes: "Say to Judges: 'In production, AegisSRE cuts Mean Time To Resolution by over 88%, prevents 100% of repeat runbook mistakes, eliminates context loss across SRE shift handoffs, and isolates each Kubernetes cluster into its own Hindsight memory bank.'"
+      },
+      {
+        label: "6. YouTube Thumbnail",
+        title: "Slide 6 of 6: Viral YouTube Thumbnail (Content Contest Deliverable)",
+        src: "/static/slides/youtube_thumbnail.jpg",
+        notes: "Bonus Slide: High-contrast 16:9 viral YouTube thumbnail created for the Hindsight Content Contest video submission."
+      }
+    ];
+
+    let idx = 0;
+    let timer = null;
+
+    function render() {
+      const s = SLIDES[idx];
+      document.getElementById("deckTitle").textContent = s.title;
+      document.getElementById("mainSlideImg").src = s.src;
+      document.getElementById("mainSlideNotes").textContent = s.notes;
+
+      document.querySelectorAll(".thumb-item").forEach((el, i) => {
+        el.classList.toggle("active", i === idx);
+      });
+    }
+
+    const strip = document.getElementById("thumbStrip");
+    strip.innerHTML = SLIDES.map((s, i) => `
+      <div class="thumb-item ${i === 0 ? 'active' : ''}" onclick="goSlide(${i})">
+        <img src="${s.src}" alt="${s.label}" />
+        <div class="thumb-caption">${s.label}</div>
+      </div>
+    `).join("");
+
+    window.goSlide = (i) => { idx = i; render(); };
+    document.getElementById("prevSlideBtn").onclick = () => { idx = (idx - 1 + SLIDES.length) % SLIDES.length; render(); };
+    document.getElementById("nextSlideBtn").onclick = () => { idx = (idx + 1) % SLIDES.length; render(); };
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") { idx = (idx + 1) % SLIDES.length; render(); }
+      if (e.key === "ArrowLeft") { idx = (idx - 1 + SLIDES.length) % SLIDES.length; render(); }
+    });
+
+    document.getElementById("btnAutoPlay").onclick = (e) => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+        e.target.textContent = "▶ Auto-Play (6s)";
+      } else {
+        timer = setInterval(() => { idx = (idx + 1) % SLIDES.length; render(); }, 6000);
+        e.target.textContent = "⏸ Pause Auto-Play";
+      }
+    };
+
+    document.getElementById("btnFullscreen").onclick = () => {
+      const stage = document.getElementById("deckStage");
+      if (stage.requestFullscreen) stage.requestFullscreen();
+    };
+
+    render();
+  </script>
+</body>
+</html>
+

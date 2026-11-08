@@ -1,0 +1,9 @@
+Generate a viral thumbnail for this YouTube video. Make the thumbnail attention grabbing and something that people scrolling would want to click on if they see it. The aspect ratio needs to be 16:9
+
+Here is the video script:
+Hi, I'm building AegisSRE—an autonomous incident response and DevOps memory agent powered by Vectorize Hindsight and Groq. When production goes down at 3 AM with connection pool exhaustion, a stateless AI agent suggests restarting Kubernetes pods, triggering a catastrophic database crash. With Hindsight's biomimetic memory (retain, recall, reflect) and 4-way TEMPR retrieval, AegisSRE recalls the exact post-mortem from 19 days ago, blocks the dangerous runbook, and resolves the outage in 42 seconds.
+Visual text on thumbnail: "STATELESS AI BROKE PROD. HINDSIGHT FIXED IT." with a cracked red alert terminal transforming into a glowing green "RESOLVED IN 42s" connected to a neural memory graph.
+
+Generated Thumbnail File in Repo:
+static/slides/youtube_thumbnail.jpg
+

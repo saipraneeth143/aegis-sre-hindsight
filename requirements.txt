@@ -1,0 +1,5 @@
+# Optional cloud SDKs (AegisSRE runs out-of-the-box with Python 3.10+ stdlib,
+# and automatically upgrades to live Hindsight Cloud SDK when installed):
+hindsight-client>=0.1.0
+groq>=0.11.0
+
