@@ -26,7 +26,10 @@ from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
 from agent.aegis_sre import AegisSREAgent
+from config_loader import load_env_files, save_keys_to_project_env
 from data.realistic_incidents import DEFAULT_BANK_ID
+
+load_env_files()
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -48,8 +51,17 @@ class AegisRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(raw)
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
 
     def _read_json_body(self) -> Dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0"))
@@ -65,14 +77,21 @@ class AegisRequestHandler(BaseHTTPRequestHandler):
         bank_id = query_params.get("bank_id", [DEFAULT_BANK_ID])[0]
 
         if path == "/api/health":
+            env_flags = load_env_files()
             self._send_json(
                 {
                     "status": "ok",
                     "service": "AegisSRE Incident Commander",
                     "hindsight_backend": GLOBAL_AGENT.memory.backend_mode,
+                    "groq_live_enabled": GLOBAL_AGENT.llm.is_live_groq,
+                    "env_status": env_flags,
                     "supported_groq_models": GLOBAL_AGENT.llm.SUPPORTED_MODELS,
                 }
             )
+            return
+
+        if path == "/api/env-status":
+            self._send_json(load_env_files())
             return
 
         if path == "/api/memories":
@@ -203,6 +222,15 @@ class AegisRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/reset":
             seeded = GLOBAL_AGENT.reset_and_seed(bank_id=bank_id)
             self._send_json({"status": "reset", "bank_id": bank_id, "count": len(seeded)})
+            return
+
+        if path == "/api/save-env":
+            flags = save_keys_to_project_env(
+                groq_api_key=body.get("groq_api_key"),
+                hindsight_api_key=body.get("hindsight_api_key"),
+                hindsight_base_url=body.get("hindsight_base_url"),
+            )
+            self._send_json({"status": "saved", "env_status": flags})
             return
 
         self._send_json({"error": f"Unknown POST endpoint: {path}"}, status=404)

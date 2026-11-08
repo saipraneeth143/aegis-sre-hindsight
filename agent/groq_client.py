@@ -24,6 +24,8 @@ import urllib.request
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from config_loader import load_env_files
+
 
 @dataclass
 class ToolCallRepairEvent:
@@ -211,7 +213,8 @@ class GroqLLMClient:
         api_key: Optional[str] = None,
         default_model: str = "openai/gpt-oss-120b",
     ) -> None:
-        self.api_key = (api_key or os.environ.get("GROQ_API_KEY", "")).strip()
+        load_env_files()
+        self._explicit_api_key = api_key
         self.default_model = (
             default_model
             if default_model in self.SUPPORTED_MODELS
@@ -219,6 +222,11 @@ class GroqLLMClient:
         )
         self.base_url = "https://api.groq.com/openai/v1/chat/completions"
         self.repair_history: List[ToolCallRepairEvent] = []
+
+    @property
+    def api_key(self) -> str:
+        load_env_files()
+        return (self._explicit_api_key or os.environ.get("GROQ_API_KEY", "")).strip()
 
     @property
     def is_live_groq(self) -> bool:

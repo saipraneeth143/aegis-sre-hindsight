@@ -714,3 +714,62 @@ textarea {
   margin-bottom: 0.3rem;
 }
 
+.hidden {
+  display: none !important;
+}
+
+.global-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  background: linear-gradient(135deg, #059669, #0d9488);
+  color: #fff;
+  padding: 0.75rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  transition: all 0.2s ease;
+}
+
+.env-drawer {
+  background: #0c1528;
+  border-bottom: 1px solid #06b6d4;
+  padding: 1rem 2rem;
+}
+
+.env-drawer-inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.env-inputs-row {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.env-inputs-row input {
+  min-width: 280px;
+  flex: 1;
+  background: #070b14;
+  color: #f0f6fc;
+  border: 1px solid #233252;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+
+@keyframes pulseHighlight {
+  0% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.55); }
+  100% { box-shadow: 0 0 0 12px rgba(6, 182, 212, 0); }
+}
+
+.flash-pulse {
+  animation: pulseHighlight 0.65s ease-out;
+}
+

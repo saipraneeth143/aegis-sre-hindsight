@@ -153,13 +153,18 @@
 
     const strip = document.getElementById("thumbStrip");
     strip.innerHTML = SLIDES.map((s, i) => `
-      <div class="thumb-item ${i === 0 ? 'active' : ''}" onclick="goSlide(${i})">
+      <div class="thumb-item ${i === 0 ? 'active' : ''}" data-idx="${i}">
         <img src="${s.src}" alt="${s.label}" />
         <div class="thumb-caption">${s.label}</div>
       </div>
     `).join("");
 
-    window.goSlide = (i) => { idx = i; render(); };
+    strip.querySelectorAll(".thumb-item").forEach((el) => {
+      el.addEventListener("click", () => {
+        idx = parseInt(el.dataset.idx, 10);
+        render();
+      });
+    });
     document.getElementById("prevSlideBtn").onclick = () => { idx = (idx - 1 + SLIDES.length) % SLIDES.length; render(); };
     document.getElementById("nextSlideBtn").onclick = () => { idx = (idx + 1) % SLIDES.length; render(); };
 

@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AegisSRE — Autonomous Incident Commander Powered by Vectorize Hindsight</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="styles.css" onerror="this.onerror=null;this.href='/static/styles.css';" />
 </head>
 <body>
+  <!-- Floating Action Toast -->
+  <div id="globalToast" class="global-toast hidden"></div>
+
   <!-- Top Command Header -->
   <header class="topbar">
     <div class="brand">
@@ -34,18 +37,39 @@
           <option value="qwen/qwen3-32b">qwen/qwen3-32b (+ToolGuard)</option>
         </select>
       </div>
-      <button id="btnResetBank" class="btn-secondary" title="Reset memory bank to default seed state">
+      <button type="button" id="btnToggleEnvPanel" class="btn-secondary" title="Configure GROQ_API_KEY and HINDSIGHT_API_KEY in local .env">
+        🔑 <span id="envStatusLabel">Set `.env` API Keys</span>
+      </button>
+      <button type="button" id="btnResetBank" class="btn-secondary" title="Reset memory bank to default seed state">
         ↻ Reset Demo Bank
       </button>
     </div>
   </header>
 
+  <!-- Collapsible Local .env API Key Setup Drawer -->
+  <div id="envConfigPanel" class="env-drawer hidden">
+    <div class="env-drawer-inner">
+      <div>
+        <strong>🔐 Local `.env` Credentials Manager (Saved privately to `.env` — Git-Ignored)</strong>
+        <p class="muted-note" style="margin-bottom:0.5rem;">
+          Paste your <code>GROQ_API_KEY</code> (free at <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style="color:#38bdf8;">console.groq.com/keys</a>) and optional <code>HINDSIGHT_API_KEY</code> (promo code <code>MEMHACK99</code>) to run live cloud LLM &amp; Hindsight calls:
+        </p>
+      </div>
+      <div class="env-inputs-row">
+        <input type="password" id="inputGroqKey" placeholder="GROQ_API_KEY (gsk_...)" autocomplete="off" />
+        <input type="password" id="inputHindsightKey" placeholder="HINDSIGHT_API_KEY (optional)" autocomplete="off" />
+        <button type="button" id="btnSaveEnvKeys" class="btn-primary">💾 Save to `.env`</button>
+        <button type="button" id="btnCloseEnvPanel" class="btn-secondary">✕ Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Navigation Tabs -->
   <nav class="nav-tabs">
-    <button class="nav-tab active" data-tab="tab-warroom">⚡ 1. Incident War-Room (Before vs. After)</button>
-    <button class="nav-tab" data-tab="tab-memory">🧠 2. Hindsight Memory Bank (`retain` / `recall` / `reflect`)</button>
-    <button class="nav-tab" data-tab="tab-curve">📈 3. Learning Curve &amp; Groq Tool-Guard</button>
-    <button class="nav-tab" data-tab="tab-slides">🖼️ 4. Interactive Pictured Pitch Slides (5 Slides)</button>
+    <button type="button" class="nav-tab active" data-tab="tab-warroom">⚡ 1. Incident War-Room (Before vs. After)</button>
+    <button type="button" class="nav-tab" data-tab="tab-memory">🧠 2. Hindsight Memory Bank (`retain` / `recall` / `reflect`)</button>
+    <button type="button" class="nav-tab" data-tab="tab-curve">📈 3. Learning Curve &amp; Groq Tool-Guard</button>
+    <button type="button" class="nav-tab" data-tab="tab-slides">🖼️ 4. Interactive Pictured Pitch Slides (5 Slides)</button>
   </nav>
 
   <!-- Main Workspace Container -->
@@ -58,16 +82,16 @@
       <div class="story-banner">
         <div>
           <h3>🎯 60-Second Judge Walkthrough: Watch Memory Transform Incident Response</h3>
-          <p>Select a live production scenario below (or paste any stack trace / PR diff) to compare a <strong>Stateless AI Agent</strong> against <strong>AegisSRE with Hindsight Memory</strong>.</p>
+          <p>Select a live production scenario below (or type any stack trace / PR diff) to compare a <strong>Stateless AI Agent</strong> against <strong>AegisSRE with Hindsight Memory</strong>.</p>
         </div>
         <div class="preset-buttons">
-          <button class="btn-preset active" data-scenario="pool_exhaustion">
+          <button type="button" class="btn-preset active" data-scenario="pool_exhaustion">
             🔥 Interaction 5: DB Pool Exhaustion (INC-4082 Recall)
           </button>
-          <button class="btn-preset" data-scenario="grpc_cascade">
+          <button type="button" class="btn-preset" data-scenario="grpc_cascade">
             ⚡ Interaction 12: Flash-Sale gRPC Cascade (Graph Traversal)
           </button>
-          <button class="btn-preset" data-scenario="pre_deploy_shield">
+          <button type="button" class="btn-preset" data-scenario="pre_deploy_shield">
             🛡️ Interaction 20: Pre-Deploy CI/CD Gate (`reflect()` Shield)
           </button>
         </div>
@@ -83,13 +107,13 @@
         <div class="composer-actions">
           <div class="stage-pill" id="interactionStagePill">Stage: Interaction 5 (Day 14 - Experience Recall)</div>
           <div class="action-buttons">
-            <button id="btnAnalyze" class="btn-primary">🚀 Run Side-by-Side Triage (`recall` + `reflect`)</button>
+            <button type="button" id="btnAnalyze" class="btn-primary">🚀 Run Side-by-Side Triage (`recall` + `reflect`)</button>
           </div>
         </div>
       </div>
 
       <!-- Side-by-Side Comparison Grid -->
-      <div class="comparison-grid">
+      <div class="comparison-grid" id="comparisonGrid">
         <!-- LEFT: STATELESS AGENT -->
         <div class="card card-stateless">
           <div class="card-header">
@@ -142,6 +166,12 @@
             <div id="hindsightCommands" class="code-list code-success"></div>
           </div>
 
+          <!-- Live Groq Output Box (Shown when GROQ_API_KEY is active) -->
+          <div id="groqLiveBox" class="section-block hidden">
+            <div class="section-label" style="color:#38bdf8;">⚡ Live Groq LLM Commander Brief</div>
+            <div id="groqLiveContent" class="reflect-box" style="margin-bottom:0.5rem;"></div>
+          </div>
+
           <div class="outcome-box outcome-success">
             <div class="outcome-header">🛡️ VERIFIED OUTCOME WITH HINDSIGHT</div>
             <p id="hindsightOutcome"></p>
@@ -172,10 +202,10 @@
 
           <div class="quick-retain-box">
             <h4>➕ Retain New Post-Mortem Learning (`hindsight.retain`)</h4>
-            <p class="muted-note">Log a new incident finding or failed runbook below and immediately re-run triage to watch the agent learn live:</p>
+            <p class="muted-note">Log a new incident finding or failed runbook below and click <strong>Retain in Bank</strong> to watch the agent learn live:</p>
             <div class="inline-form">
               <input type="text" id="quickRetainInput" placeholder="e.g., [Post-Mortem INC-4409] Never run helm rollback on payment-gateway-grpc during schema migration; drain Envoy listeners first." />
-              <button id="btnQuickRetain" class="btn-primary">Retain in Bank</button>
+              <button type="button" id="btnQuickRetain" class="btn-primary">Retain in Bank</button>
             </div>
             <div id="quickRetainStatus" class="status-toast"></div>
           </div>
@@ -216,10 +246,10 @@
           <div class="card-header">
             <strong class="card-title">Biomimetic Memory Bank Inspector</strong>
             <div class="filter-pills">
-              <button class="pill active" data-filter="all">All</button>
-              <button class="pill" data-filter="world">world</button>
-              <button class="pill" data-filter="experience">experience</button>
-              <button class="pill" data-filter="observation">observation</button>
+              <button type="button" class="pill active" data-filter="all">All</button>
+              <button type="button" class="pill" data-filter="world">world</button>
+              <button type="button" class="pill" data-filter="experience">experience</button>
+              <button type="button" class="pill" data-filter="observation">observation</button>
             </div>
           </div>
           <div id="bankMemoriesContainer" class="bank-memories-list"></div>
@@ -229,7 +259,7 @@
         <div class="card">
           <div class="card-header">
             <strong class="card-title">🕸️ Hindsight Entity Knowledge Graph (2-Hop Blast Radius)</strong>
-            <button id="btnTriggerReflect" class="btn-secondary">✨ Run `reflect()` &amp; Persist Observation</button>
+            <button type="button" id="btnTriggerReflect" class="btn-secondary">✨ Run `reflect()` &amp; Persist Observation</button>
           </div>
           <svg id="knowledgeGraphSvg" viewBox="0 0 640 360" class="graph-svg"></svg>
           <div class="graph-legend">
@@ -258,7 +288,7 @@
           <div>
             <strong class="card-title">🛠️ Groq Function-Calling Self-Healing Guard (`openai/gpt-oss-120b` &amp; `qwen/qwen3-32b`)</strong>
           </div>
-          <button id="btnRunToolGuardTest" class="btn-primary">⚡ Test Live Malformed Tool-Call Recovery</button>
+          <button type="button" id="btnRunToolGuardTest" class="btn-primary">⚡ Test Live Malformed Tool-Call Recovery</button>
         </div>
         <p class="muted-note">
           Open-weights reasoning models (`qwen/qwen3-32b` and `openai/gpt-oss-120b`) frequently emit `&lt;think&gt;...&lt;/think&gt;` tags, markdown fences, trailing commas, or truncated JSON during tool invocations. `GroqToolCallGuard` intercepts and repairs these payloads before they hit Hindsight:
@@ -277,9 +307,9 @@
             <strong id="slideHeaderTitle" class="card-title">Slide 1 of 5: The $14,000/Minute Amnesia Problem</strong>
           </div>
           <div class="slides-controls">
-            <button id="btnPrevSlide" class="btn-secondary">◀ Previous Slide</button>
+            <button type="button" id="btnPrevSlide" class="btn-secondary">◀ Previous Slide</button>
             <div id="slideDots" class="slide-dots"></div>
-            <button id="btnNextSlide" class="btn-primary">Next Slide ▶</button>
+            <button type="button" id="btnNextSlide" class="btn-primary">Next Slide ▶</button>
           </div>
         </div>
 
@@ -296,7 +326,6 @@
 
   </main>
 
-  <script src="/static/app.js"></script>
+  <script src="app.js" onerror="var s=document.createElement('script');s.src='/static/app.js';document.body.appendChild(s);"></script>
 </body>
 </html>
-

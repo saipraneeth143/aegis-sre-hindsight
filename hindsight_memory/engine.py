@@ -23,7 +23,10 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+from config_loader import PROJECT_ROOT, load_env_files
 
 # Optional import of official Vectorize Hindsight Python SDK
 try:
@@ -152,17 +155,18 @@ class HindsightMemoryEngine:
 
     def __init__(
         self,
-        db_path: str = "aegis_hindsight_memory.db",
+        db_path: Optional[str] = None,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
     ) -> None:
-        self.db_path = db_path
+        load_env_files()
+        self.db_path = db_path or str(PROJECT_ROOT / "aegis_hindsight_memory.db")
         self.base_url = (
             base_url
             or os.environ.get("HINDSIGHT_BASE_URL")
             or "https://api.hindsight.vectorize.io"
         ).rstrip("/")
-        self.api_key = api_key or os.environ.get("HINDSIGHT_API_KEY", "").strip()
+        self._explicit_api_key = api_key
 
         self._sdk_client: Any = None
         if self.api_key and OfficialHindsightClient is not None:
@@ -175,6 +179,11 @@ class HindsightMemoryEngine:
                 self._sdk_client = None
 
         self._init_db()
+
+    @property
+    def api_key(self) -> str:
+        load_env_files()
+        return (self._explicit_api_key or os.environ.get("HINDSIGHT_API_KEY", "")).strip()
 
     @property
     def backend_mode(self) -> str:

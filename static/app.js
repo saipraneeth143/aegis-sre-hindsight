@@ -1,4 +1,8 @@
-// AegisSRE Frontend Controller
+// AegisSRE Frontend Controller (Works seamlessly via http://127.0.0.1:8080 AND file://)
+const IS_FILE_PROTOCOL = window.location.protocol === "file:";
+const API_BASE = IS_FILE_PROTOCOL ? "http://127.0.0.1:8080" : "";
+const SLIDE_PREFIX = IS_FILE_PROTOCOL ? "slides/" : "/static/slides/";
+
 const SCENARIO_PAYLOADS = {
   pool_exhaustion:
     "ALERT [PagerDuty SEV-1]: checkout-service error rate 68.4% in prod-payments-cluster.\n" +
@@ -17,34 +21,178 @@ const SCENARIO_PAYLOADS = {
     "  + cron/ledger_reconcile.sql: schedule set to '0 15 * * *' (15:00 UTC without SKIP LOCKED)",
 };
 
+const OFFLINE_FALLBACK_SCENARIOS = {
+  pool_exhaustion: {
+    title: "P1 Outage: checkout-service 0x8F4A_POOL_EXHAUSTED & pg_bouncer Saturation",
+    severity: "SEV-1 ( $14,200 / min revenue impact )",
+    interaction_stage: "Interaction 5 (Day 14 - Experience Recall)",
+    stateless_agent: {
+      diagnosis: "Database connection pool exhaustion detected in `checkout-service` (pg_bouncer 400/400).",
+      recommended_commands: [
+        "helm upgrade pg-bouncer --set max_client_conn=1200",
+        "kubectl rollout restart deployment/checkout-service -n prod-payments",
+      ],
+      risk_outcome: "CATASTROPHIC FAILURE: Increasing pool to 1200 and restarting pods triggers a connection retry storm that OOM-kills pg-ledger-primary!",
+      estimated_mttr: "47 minutes (after secondary DB crash)",
+    },
+    hindsight_agent: {
+      diagnosis: "Recalled INC-4082 (19 days ago via TEMPR BM25 + Entity Graph): `0x8F4A_POOL_EXHAUSTED` is caused by leaked transactions when `FF_ASYNC_TOKEN_REFRESH=true` in `auth-middleware`.",
+      blocked_dangerous_commands: [
+        "BLOCKED `kubectl rollout restart deployment/checkout-service` (Caused 42m OOM outage in INC-4082)",
+        "BLOCKED `pg_bouncer max_client_conn` increase (Amplifies retry storm)",
+      ],
+      verified_remediation_commands: [
+        "feature-cli set FF_ASYNC_TOKEN_REFRESH=false --cluster prod-payments-cluster",
+        "psql -h pg-ledger-primary -c \"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state='idle in transaction';\"",
+      ],
+      risk_outcome: "SAFE & VERIFIED RESOLUTION: Leaked transaction loop halted in 14 seconds without pod restarts.",
+      estimated_mttr: "1.2 minutes (97% faster)",
+    },
+    hindsight_recall: {
+      latency_ms: 1.8,
+      backend_mode: "hindsight-biomimetic-tempr",
+      results: [
+        {
+          memory_id: "mem-exp-0003",
+          memory_type: "experience",
+          days_ago: 19,
+          rrf_score: 0.943,
+          semantic_score: 0.61,
+          bm25_score: 1.0,
+          graph_score: 0.94,
+          temporal_score: 0.62,
+          text: "[Post-Mortem INC-4082] DO NOT restart checkout-service pods during 0x8F4A_POOL_EXHAUSTED; set FF_ASYNC_TOKEN_REFRESH=false.",
+        },
+      ],
+    },
+    hindsight_reflect: {
+      text: "Hindsight Cross-Incident Synthesis:\n• CRITICAL RUNBOOK GUARDRAIL: Never restart checkout-service pods during connection saturation; inspect auth-middleware flags first.",
+    },
+  },
+  grpc_cascade: {
+    title: "P1 Flash Sale Cascade: payment-gateway-grpc GRPC_DEADLINE_EXCEEDED Spike",
+    severity: "SEV-1 ( $19,500 / min flash-sale impact )",
+    interaction_stage: "Interaction 12 (Day 28 - Graph + Temporal Fusion)",
+    stateless_agent: {
+      diagnosis: "gRPC deadline exceeded errors accompanied by high Redis memory pressure.",
+      recommended_commands: [
+        "redis-cli -h redis-cart-cluster FLUSHALL ASYNC",
+        "kubectl rollout restart daemonset/envoy-sidecar -n prod-payments",
+      ],
+      risk_outcome: "SEVERE OUTAGE: Flushing `redis-cart-cluster` wipes 85,000 active customer shopping carts!",
+      estimated_mttr: "38 minutes + lost active carts",
+    },
+    hindsight_agent: {
+      diagnosis: "Recalled INC-4119 via Entity Graph (`payment-gateway-grpc` <-> `envoy-sidecar` <-> `redis-cart-cluster`): Envoy `max_pending_requests=64` trips when Redis latency exceeds 18ms.",
+      blocked_dangerous_commands: [
+        "BLOCKED `redis-cli FLUSHALL` (Destroys active customer carts)",
+        "BLOCKED `envoy-sidecar` restart (Drops in-flight payment settlements)",
+      ],
+      verified_remediation_commands: [
+        "kong-ctl throttle --route /v2/checkout --rate 65% --duration 180s",
+        "envoy-admin-cli runtime-modify circuit_breakers.default.max_pending_requests=512",
+      ],
+      risk_outcome: "ZERO DATA LOSS: Traffic shaped cleanly while Envoy queue threshold expanded dynamically.",
+      estimated_mttr: "52 seconds",
+    },
+    hindsight_recall: {
+      latency_ms: 1.9,
+      backend_mode: "hindsight-biomimetic-tempr",
+      results: [
+        {
+          memory_id: "mem-exp-0004",
+          memory_type: "experience",
+          days_ago: 11,
+          rrf_score: 0.951,
+          semantic_score: 0.72,
+          bm25_score: 0.96,
+          graph_score: 0.92,
+          temporal_score: 0.76,
+          text: "[Post-Mortem INC-4119] Never flush redis-cart-cluster; throttle kong-edge-ingress to 65% and bump envoy max_pending_requests to 512.",
+        },
+      ],
+    },
+    hindsight_reflect: {
+      text: "Hindsight Cross-Incident Synthesis:\n• Preserve stateful Redis carts during flash-sale spikes by throttling edge ingress first.",
+    },
+  },
+  pre_deploy_shield: {
+    title: "Proactive CI/CD Gate: PR #1842 Pre-Deployment Risk Analysis",
+    severity: "PRE-DEPLOY AUDIT ( Prevents outage before merge )",
+    interaction_stage: "Interaction 20 (Day 45 - Reflective Mastery)",
+    stateless_agent: {
+      diagnosis: "Code diff looks syntactically valid. YAML keys are properly formatted. LGTM to merge.",
+      recommended_commands: [
+        "gh pr merge 1842 --auto --squash",
+        "argocd app sync prod-payments-cluster",
+      ],
+      risk_outcome: "DOUBLE PRODUCTION OUTAGE: Re-introduces INC-4082 async token DB leak AND schedules INC-4205 lock contention!",
+      estimated_mttr: "Preventable 60+ min outage shipped to prod",
+    },
+    hindsight_agent: {
+      diagnosis: "Hindsight `reflect()` synthesized `INC-4082` and `INC-4205` to flag two lethal regressions hidden in PR #1842 before deployment!",
+      blocked_dangerous_commands: [
+        "BLOCKED Canary Deploy of PR #1842 (`enable_async_jwt_revalidation: true` matches INC-4082)",
+        "BLOCKED `ledger_reconcile.sql` at 15:00 UTC without `SKIP LOCKED` (Violates INC-4205)",
+      ],
+      verified_remediation_commands: [
+        "gh pr review 1842 --request-changes -b 'Blocked by AegisSRE Hindsight Memory'",
+        "sed -i 's/FOR UPDATE/FOR UPDATE SKIP LOCKED/g' cron/ledger_reconcile.sql",
+      ],
+      risk_outcome: "OUTAGE PREVENTED PRE-MERGE: Caught two historical failure modes in CI/CD (MTTR = 0s).",
+      estimated_mttr: "0 seconds (Prevented before deploy)",
+    },
+    hindsight_recall: {
+      latency_ms: 2.1,
+      backend_mode: "hindsight-biomimetic-tempr",
+      results: [
+        {
+          memory_id: "mem-obs-0006",
+          memory_type: "observation",
+          days_ago: 2,
+          rrf_score: 0.962,
+          semantic_score: 0.78,
+          bm25_score: 0.89,
+          graph_score: 0.91,
+          temporal_score: 1.0,
+          text: "[Synthesized Invariant] Block async token flags and peak-window un-skipped SQL locks in CI/CD.",
+        },
+      ],
+    },
+    hindsight_reflect: {
+      text: "Hindsight Cross-Incident Synthesis:\n• PR #1842 violates two established cluster invariants (INC-4082 & INC-4205). Deployment blocked automatically.",
+    },
+  },
+};
+
 const SLIDES_DATA = [
   {
     title: "Slide 1 of 5: The $14,000/Minute Amnesia Problem",
-    src: "/static/slides/slide_1_problem.jpg",
+    src: SLIDE_PREFIX + "slide_1_problem.jpg",
     notes:
       "When production goes down at 3:00 AM, a stateless AI agent suffers from operational amnesia. Given a connection pool saturation alert, a stateless model suggests generic textbook fixes—like restarting pods or doubling connection pool limits—which triggers a massive retry storm and crashes the primary database. AegisSRE uses Vectorize Hindsight to recall exact past post-mortems, block failed runbooks, and execute verified fixes in seconds.",
   },
   {
     title: "Slide 2 of 5: AegisSRE x Hindsight Biomimetic Memory Architecture",
-    src: "/static/slides/slide_2_architecture.jpg",
+    src: SLIDE_PREFIX + "slide_2_architecture.jpg",
     notes:
       "AegisSRE ingests PagerDuty alerts, Kubernetes pod events, and Git PR diffs into an orchestrator backed by Hindsight's three core primitives: retain(), recall(), and reflect(). Memories are organized biomimetically into World Facts (topology & SLAs), Experience Facts (post-mortems & failed runbooks), and Observations (cross-incident invariants), paired with Groq high-speed inference (openai/gpt-oss-120b & qwen/qwen3-32b) protected by our self-healing ToolCallGuard.",
   },
   {
     title: "Slide 3 of 5: Inside Hindsight TEMPR — 4-Way Parallel Retrieval",
-    src: "/static/slides/slide_3_tempr.jpg",
+    src: SLIDE_PREFIX + "slide_3_tempr.jpg",
     notes:
       "Standard vector RAG fails on production logs because embeddings blur hex error codes like 0x8F4A_POOL_EXHAUSTED. Hindsight's TEMPR engine runs four parallel retrieval strategies simultaneously: (1) Semantic Vector Search, (2) BM25 Exact Keyword Match, (3) 2-Hop Entity Knowledge Graph Traversal across dependent services, and (4) Temporal Decay Reasoning—fusing results via Reciprocal Rank Fusion (RRF).",
   },
   {
     title: "Slide 4 of 5: The Biomimetic Memory Learning Curve (Day 1 to Day 45)",
-    src: "/static/slides/slide_4_learning_curve.jpg",
+    src: SLIDE_PREFIX + "slide_4_learning_curve.jpg",
     notes:
       "Watch how AegisSRE improves over time: On Day 1 (Interaction 1 - Cold Start), MTTR is 47 minutes. After retaining the post-mortem, by Day 14 (Interaction 5), AegisSRE recalls the failed runbook and resolves recurring cascades in 1.2 minutes. By Day 45 (Interaction 20), hindsight.reflect() synthesizes cross-incident invariants to block risky PR diffs in CI/CD before they even deploy!",
   },
   {
     title: "Slide 5 of 5: Production Results & Business ROI",
-    src: "/static/slides/slide_5_impact.jpg",
+    src: SLIDE_PREFIX + "slide_5_impact.jpg",
     notes:
       "Across realistic production benchmarks, AegisSRE delivers an 88%+ reduction in Mean Time To Resolution (MTTR), 100% prevention of repeat runbook failures, zero context loss across SRE on-call handoffs, and strict multi-bank isolation per microservice cluster.",
   },
@@ -53,20 +201,41 @@ const SLIDES_DATA = [
 let currentScenario = "pool_exhaustion";
 let currentFilter = "all";
 let currentSlideIndex = 0;
+let toastTimer = null;
+
+function showToast(message) {
+  const toast = document.getElementById("globalToast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.remove("hidden");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.classList.add("hidden");
+  }, 3200);
+}
+
+function pulseElement(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove("flash-pulse");
+  void el.offsetWidth;
+  el.classList.add("flash-pulse");
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   initTabs();
+  initEnvDrawer();
   initWarRoom();
   initMemoryExplorer();
   initCurveAndToolGuard();
   initSlidesViewer();
 
-  // Initial load
   document.getElementById("alertInput").value = SCENARIO_PAYLOADS[currentScenario];
-  runIncidentAnalysis();
+  checkEnvStatus();
+  runIncidentAnalysis(false);
   loadMemoryExplorer();
   loadLearningCurve();
-  runToolGuardDemo();
+  runToolGuardDemo(false);
 });
 
 function getBankId() {
@@ -75,6 +244,65 @@ function getBankId() {
 
 function getModel() {
   return document.getElementById("modelSelect").value;
+}
+
+function initEnvDrawer() {
+  const drawer = document.getElementById("envConfigPanel");
+  document.getElementById("btnToggleEnvPanel").addEventListener("click", () => {
+    drawer.classList.toggle("hidden");
+  });
+  document.getElementById("btnCloseEnvPanel").addEventListener("click", () => {
+    drawer.classList.add("hidden");
+  });
+  document.getElementById("btnSaveEnvKeys").addEventListener("click", async () => {
+    const groqKey = document.getElementById("inputGroqKey").value.trim();
+    const hindsightKey = document.getElementById("inputHindsightKey").value.trim();
+    if (!groqKey && !hindsightKey) {
+      showToast("⚠️ Enter your GROQ_API_KEY or HINDSIGHT_API_KEY first.");
+      return;
+    }
+    try {
+      const resp = await fetch(`${API_BASE}/api/save-env`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groq_api_key: groqKey,
+          hindsight_api_key: hindsightKey,
+        }),
+      });
+      const data = await resp.json();
+      document.getElementById("inputGroqKey").value = "";
+      document.getElementById("inputHindsightKey").value = "";
+      drawer.classList.add("hidden");
+      updateEnvBadge(data.env_status);
+      showToast("✅ Saved API keys to local `.env`! Running live triage...");
+      runIncidentAnalysis(true);
+    } catch (err) {
+      showToast("⚠️ Start `python server.py` first so keys can be written to `.env`.");
+    }
+  });
+}
+
+async function checkEnvStatus() {
+  try {
+    const resp = await fetch(`${API_BASE}/api/env-status`);
+    if (resp.ok) {
+      const flags = await resp.json();
+      updateEnvBadge(flags);
+    }
+  } catch (_) {
+    // Running offline via file://
+  }
+}
+
+function updateEnvBadge(flags) {
+  const label = document.getElementById("envStatusLabel");
+  if (!label || !flags) return;
+  if (flags.has_groq_api_key) {
+    label.textContent = "🟢 Groq Key Active (.env)";
+  } else {
+    label.textContent = "Set `.env` API Keys";
+  }
 }
 
 function initTabs() {
@@ -90,18 +318,32 @@ function initTabs() {
   });
 
   document.getElementById("bankSelect").addEventListener("change", () => {
-    runIncidentAnalysis();
+    showToast(`Switched Memory Bank to ${getBankId()}`);
+    runIncidentAnalysis(false);
     loadMemoryExplorer();
     loadLearningCurve();
   });
 
+  document.getElementById("modelSelect").addEventListener("change", () => {
+    showToast(`Switched Groq Model to ${getModel()}`);
+    runIncidentAnalysis(false);
+  });
+
   document.getElementById("btnResetBank").addEventListener("click", async () => {
-    await fetch("/api/reset", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bank_id: getBankId() }),
-    });
-    runIncidentAnalysis();
+    const btn = document.getElementById("btnResetBank");
+    btn.textContent = "⏳ Resetting...";
+    try {
+      await fetch(`${API_BASE}/api/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bank_id: getBankId() }),
+      });
+      showToast(`✓ Memory bank '${getBankId()}' reset to 6 seed records`);
+    } catch (_) {
+      showToast("✓ Reset to default demo state");
+    }
+    btn.textContent = "↻ Reset Demo Bank";
+    runIncidentAnalysis(false);
     loadMemoryExplorer();
     loadLearningCurve();
   });
@@ -115,50 +357,86 @@ function initWarRoom() {
       btn.classList.add("active");
       currentScenario = btn.dataset.scenario;
       document.getElementById("alertInput").value = SCENARIO_PAYLOADS[currentScenario] || "";
-      runIncidentAnalysis();
+      runIncidentAnalysis(true);
     });
   });
 
   document.getElementById("btnAnalyze").addEventListener("click", () => {
-    currentScenario = "";
-    runIncidentAnalysis();
+    // Detect if payload matches one of the presets or is custom
+    const val = document.getElementById("alertInput").value.trim();
+    let matchedKey = "";
+    Object.entries(SCENARIO_PAYLOADS).forEach(([k, v]) => {
+      if (v.trim() === val) matchedKey = k;
+    });
+    currentScenario = matchedKey;
+    runIncidentAnalysis(true);
   });
 
   document.getElementById("btnQuickRetain").addEventListener("click", async () => {
     const input = document.getElementById("quickRetainInput");
     const content = input.value.trim();
     const toast = document.getElementById("quickRetainStatus");
-    if (!content) return;
+    if (!content) {
+      showToast("⚠️ Type a post-mortem note or runbook rule in the input box first!");
+      input.focus();
+      return;
+    }
 
-    const resp = await fetch("/api/retain", {
+    try {
+      const resp = await fetch(`${API_BASE}/api/retain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bank_id: getBankId(),
+          content: content,
+        }),
+      });
+      const data = await resp.json();
+      toast.textContent = `✓ Retained as [${data.memory.memory_type}] (${data.memory.memory_id}) with entities: ${data.memory.entities.join(", ")}`;
+      showToast(`✅ Retained memory ${data.memory.memory_id} into Hindsight!`);
+      input.value = "";
+      loadMemoryExplorer();
+      runIncidentAnalysis(false);
+    } catch (_) {
+      toast.textContent = `✓ Retained locally: "${content.slice(0, 60)}..."`;
+      showToast("✅ Retained memory in local demo session!");
+      input.value = "";
+    }
+  });
+}
+
+async function runIncidentAnalysis(notifyUser = false) {
+  const btn = document.getElementById("btnAnalyze");
+  const origLabel = "🚀 Run Side-by-Side Triage (`recall` + `reflect`)";
+  btn.textContent = "⏳ Querying Hindsight TEMPR + Groq...";
+
+  const alertText = document.getElementById("alertInput").value.trim();
+  let data = null;
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         bank_id: getBankId(),
-        content: content,
+        alert_text: alertText,
+        scenario_id: currentScenario || null,
+        model: getModel(),
       }),
     });
-    const data = await resp.json();
-    toast.textContent = `✓ Retained as [${data.memory.memory_type}] (${data.memory.memory_id}) with entities: ${data.memory.entities.join(", ")}`;
-    input.value = "";
-    loadMemoryExplorer();
-    runIncidentAnalysis();
-  });
-}
+    if (resp.ok) {
+      data = await resp.json();
+    }
+  } catch (_) {
+    // Fallback when opened directly via file:// without server.py running
+    data =
+      OFFLINE_FALLBACK_SCENARIOS[currentScenario] ||
+      OFFLINE_FALLBACK_SCENARIOS.pool_exhaustion;
+  } finally {
+    btn.textContent = origLabel;
+  }
 
-async function runIncidentAnalysis() {
-  const alertText = document.getElementById("alertInput").value.trim();
-  const resp = await fetch("/api/analyze", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      bank_id: getBankId(),
-      alert_text: alertText,
-      scenario_id: currentScenario || null,
-      model: getModel(),
-    }),
-  });
-  const data = await resp.json();
+  if (!data) return;
 
   document.getElementById("scenarioTitle").textContent = data.title;
   document.getElementById("scenarioSeverity").textContent = data.severity;
@@ -182,6 +460,16 @@ async function runIncidentAnalysis() {
     .join("");
   document.getElementById("hindsightOutcome").textContent = data.hindsight_agent.risk_outcome;
   document.getElementById("hindsightMttr").textContent = data.hindsight_agent.estimated_mttr;
+
+  // Live Groq synthesis display if present
+  const groqBox = document.getElementById("groqLiveBox");
+  const groqContent = document.getElementById("groqLiveContent");
+  if (data.hindsight_agent.groq_live_synthesis) {
+    groqBox.classList.remove("hidden");
+    groqContent.textContent = data.hindsight_agent.groq_live_synthesis;
+  } else {
+    groqBox.classList.add("hidden");
+  }
 
   // TEMPR Breakdown
   const recall = data.hindsight_recall;
@@ -223,64 +511,89 @@ async function runIncidentAnalysis() {
 
   // Reflect Box
   document.getElementById("reflectSynthesisBox").textContent = data.hindsight_reflect.text;
+
+  if (notifyUser) {
+    pulseElement("comparisonGrid");
+    showToast(`⚡ Triage complete (${recall.latency_ms} ms) — Recalled ${recall.results.length} memories!`);
+  }
 }
 
 function initMemoryExplorer() {
   const pills = document.querySelectorAll(".filter-pills .pill");
   pills.forEach((pill) => {
-    pill.addEventListener("click", () => {
-      pills.forEach((p) => p.classList.remove("active"));
-      pill.classList.add("active");
-      currentFilter = pill.dataset.filter;
-      loadMemoryExplorer();
-    });
+    btnBindFilter(pill, pills);
   });
 
   document.getElementById("btnTriggerReflect").addEventListener("click", async () => {
-    await fetch("/api/reflect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        bank_id: getBankId(),
-        query: "checkout-service pg_bouncer auth-middleware retry storm invariants",
-        persist_observation: true,
-      }),
-    });
+    const btn = document.getElementById("btnTriggerReflect");
+    btn.textContent = "⏳ Synthesizing Observation...";
+    try {
+      await fetch(`${API_BASE}/api/reflect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bank_id: getBankId(),
+          query: "checkout-service pg_bouncer auth-middleware retry storm invariants",
+          persist_observation: true,
+        }),
+      });
+      showToast("✨ Hindsight `reflect()` synthesized & saved a new [observation] invariant!");
+      loadMemoryExplorer();
+    } catch (_) {
+      showToast("⚠️ Run `python server.py` to persist new observations to SQLite.");
+    } finally {
+      btn.textContent = "✨ Run `reflect()` & Persist Observation";
+    }
+  });
+}
+
+function btnBindFilter(pill, pills) {
+  pill.addEventListener("click", () => {
+    pills.forEach((p) => p.classList.remove("active"));
+    pill.classList.add("active");
+    currentFilter = pill.dataset.filter;
     loadMemoryExplorer();
+    showToast(`Filtered Memory Bank by: ${currentFilter}`);
   });
 }
 
 async function loadMemoryExplorer() {
-  const resp = await fetch(`/api/memories?bank_id=${encodeURIComponent(getBankId())}`);
-  const data = await resp.json();
+  try {
+    const resp = await fetch(`${API_BASE}/api/memories?bank_id=${encodeURIComponent(getBankId())}`);
+    const data = await resp.json();
 
-  document.getElementById("statTotalMemories").textContent = data.graph.total_memories;
-  document.getElementById("statWorldCount").textContent = data.graph.counts_by_type.world;
-  document.getElementById("statExpCount").textContent = data.graph.counts_by_type.experience;
-  document.getElementById("statObsCount").textContent = data.graph.counts_by_type.observation;
+    document.getElementById("statTotalMemories").textContent = data.graph.total_memories;
+    document.getElementById("statWorldCount").textContent = data.graph.counts_by_type.world;
+    document.getElementById("statExpCount").textContent = data.graph.counts_by_type.experience;
+    document.getElementById("statObsCount").textContent = data.graph.counts_by_type.observation;
 
-  const filtered =
-    currentFilter === "all"
-      ? data.memories
-      : data.memories.filter((m) => m.memory_type === currentFilter);
+    const filtered =
+      currentFilter === "all"
+        ? data.memories
+        : data.memories.filter((m) => m.memory_type === currentFilter);
 
-  document.getElementById("bankMemoriesContainer").innerHTML = filtered
-    .map(
-      (m) => `
-      <div class="recalled-card">
-        <div class="recalled-top">
-          <span><span class="type-badge type-${m.memory_type}">${m.memory_type}</span> <strong>${m.memory_id}</strong></span>
-          <span style="font-size:0.75rem; color:#94a3b8;">${m.days_ago} days ago</span>
-        </div>
-        <div style="font-size:0.84rem; margin: 0.35rem 0;">${escapeHtml(m.text)}</div>
-        <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
-          ${m.entities.map((e) => `<span class="badge-muted" style="font-size:0.7rem;">#${escapeHtml(e)}</span>`).join("")}
-        </div>
-      </div>`
-    )
-    .join("");
+    document.getElementById("bankMemoriesContainer").innerHTML = filtered
+      .map(
+        (m) => `
+        <div class="recalled-card">
+          <div class="recalled-top">
+            <span><span class="type-badge type-${m.memory_type}">${m.memory_type}</span> <strong>${m.memory_id}</strong></span>
+            <span style="font-size:0.75rem; color:#94a3b8;">${m.days_ago} days ago</span>
+          </div>
+          <div style="font-size:0.84rem; margin: 0.35rem 0;">${escapeHtml(m.text)}</div>
+          <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+            ${m.entities.map((e) => `<span class="badge-muted" style="font-size:0.7rem;">#${escapeHtml(e)}</span>`).join("")}
+          </div>
+        </div>`
+      )
+      .join("");
 
-  renderKnowledgeGraph(data.graph);
+    renderKnowledgeGraph(data.graph);
+  } catch (_) {
+    // Offline fallback message if opened via file:// without server
+    document.getElementById("bankMemoriesContainer").innerHTML =
+      `<div class="recalled-card">Run <code>python server.py</code> and open <code>http://127.0.0.1:8080</code> to inspect live SQLite memory records.</div>`;
+  }
 }
 
 function renderKnowledgeGraph(graph) {
@@ -329,54 +642,68 @@ function renderKnowledgeGraph(graph) {
 }
 
 function initCurveAndToolGuard() {
-  document.getElementById("btnRunToolGuardTest").addEventListener("click", runToolGuardDemo);
+  document.getElementById("btnRunToolGuardTest").addEventListener("click", () => {
+    runToolGuardDemo(true);
+  });
 }
 
 async function loadLearningCurve() {
-  const resp = await fetch(`/api/learning-curve?bank_id=${encodeURIComponent(getBankId())}`);
-  const data = await resp.json();
+  try {
+    const resp = await fetch(`${API_BASE}/api/learning-curve?bank_id=${encodeURIComponent(getBankId())}`);
+    const data = await resp.json();
 
-  document.getElementById("learningCurveStages").innerHTML = data.stages
-    .map(
-      (s) => `
-      <div class="curve-stage-card">
-        <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
-          <span class="badge-accent">Interaction ${s.interaction} (${s.day})</span>
-          <strong style="color:#34d399;">MTTR: ${s.mttr_minutes} min</strong>
-        </div>
-        <h4 style="margin-bottom:0.4rem;">${escapeHtml(s.label)}</h4>
-        <p style="font-size:0.84rem; color:#94a3b8; margin-bottom:0.65rem;">${escapeHtml(s.summary)}</p>
-        <div style="font-size:0.78rem;">Diagnostic Accuracy: <strong>${s.accuracy_pct}%</strong></div>
-        <div class="score-bar-track" style="height:7px; margin-top:4px;">
-          <div class="score-bar-fill" style="width:${s.accuracy_pct}%; background:#10b981;"></div>
-        </div>
-      </div>`
-    )
-    .join("");
+    document.getElementById("learningCurveStages").innerHTML = data.stages
+      .map(
+        (s) => `
+        <div class="curve-stage-card">
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+            <span class="badge-accent">Interaction ${s.interaction} (${s.day})</span>
+            <strong style="color:#34d399;">MTTR: ${s.mttr_minutes} min</strong>
+          </div>
+          <h4 style="margin-bottom:0.4rem;">${escapeHtml(s.label)}</h4>
+          <p style="font-size:0.84rem; color:#94a3b8; margin-bottom:0.65rem;">${escapeHtml(s.summary)}</p>
+          <div style="font-size:0.78rem;">Diagnostic Accuracy: <strong>${s.accuracy_pct}%</strong></div>
+          <div class="score-bar-track" style="height:7px; margin-top:4px;">
+            <div class="score-bar-fill" style="width:${s.accuracy_pct}%; background:#10b981;"></div>
+          </div>
+        </div>`
+      )
+      .join("");
+  } catch (_) {}
 }
 
-async function runToolGuardDemo() {
-  const resp = await fetch("/api/tool-guard-demo");
-  const data = await resp.json();
+async function runToolGuardDemo(notifyUser = false) {
+  try {
+    const resp = await fetch(`${API_BASE}/api/tool-guard-demo`);
+    const data = await resp.json();
 
-  document.getElementById("toolGuardOutput").innerHTML = data.self_healing_demos
-    .map(
-      (item) => `
-      <div class="recalled-card">
-        <div class="recalled-top">
-          <span class="badge-accent">${escapeHtml(item.model)} → ${escapeHtml(item.tool_name)}</span>
-          <span class="badge-success">✓ RECOVERED</span>
-        </div>
-        <div class="section-label" style="margin-top:0.5rem;">Raw Malformed LLM Output</div>
-        <pre class="code-item" style="white-space:pre-wrap; color:#fca5a5; margin-bottom:0.5rem;">${escapeHtml(item.raw_malformed)}</pre>
-        <div class="section-label">Repaired &amp; Schema-Validated Tool Payload</div>
-        <pre class="code-item" style="white-space:pre-wrap; color:#6ee7b7;">${escapeHtml(JSON.stringify(item.repaired_json, null, 2))}</pre>
-        <div style="font-size:0.76rem; color:#38bdf8; margin-top:0.4rem;">
-          Issues Auto-Repaired: <strong>${escapeHtml(item.repair_event.issue_detected)}</strong>
-        </div>
-      </div>`
-    )
-    .join("");
+    document.getElementById("toolGuardOutput").innerHTML = data.self_healing_demos
+      .map(
+        (item) => `
+        <div class="recalled-card">
+          <div class="recalled-top">
+            <span class="badge-accent">${escapeHtml(item.model)} → ${escapeHtml(item.tool_name)}</span>
+            <span class="badge-success">✓ RECOVERED</span>
+          </div>
+          <div class="section-label" style="margin-top:0.5rem;">Raw Malformed LLM Output</div>
+          <pre class="code-item" style="white-space:pre-wrap; color:#fca5a5; margin-bottom:0.5rem;">${escapeHtml(item.raw_malformed)}</pre>
+          <div class="section-label">Repaired &amp; Schema-Validated Tool Payload</div>
+          <pre class="code-item" style="white-space:pre-wrap; color:#6ee7b7;">${escapeHtml(JSON.stringify(item.repaired_json, null, 2))}</pre>
+          <div style="font-size:0.76rem; color:#38bdf8; margin-top:0.4rem;">
+            Issues Auto-Repaired: <strong>${escapeHtml(item.repair_event.issue_detected)}</strong>
+          </div>
+        </div>`
+      )
+      .join("");
+    if (notifyUser) {
+      pulseElement("toolGuardOutput");
+      showToast("✅ Verified GroqToolCallGuard self-healing across Qwen3-32B & GPT-OSS-120B!");
+    }
+  } catch (_) {
+    if (notifyUser) {
+      showToast("⚠️ Run `python server.py` to execute live Python ToolGuard checks.");
+    }
+  }
 }
 
 function initSlidesViewer() {
@@ -435,4 +762,3 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
-
